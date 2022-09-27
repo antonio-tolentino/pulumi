@@ -10,14 +10,16 @@ import (
 func main() {
 	pulumi.Run(func(ctx *pulumi.Context) error {
 
-		appName := pulumi.String("books")
+		appName := "books"
+
 		appLabels := pulumi.StringMap{
-			"app": pulumi.String("books"),
+			"app": pulumi.String(appName),
 		}
-		deployment, err := appsv1.NewDeployment(ctx, "books", &appsv1.DeploymentArgs{
+
+		deployment, err := appsv1.NewDeployment(ctx, appName, &appsv1.DeploymentArgs{
 			Metadata: &metav1.ObjectMetaArgs{
 				Labels: appLabels,
-				Name:   appName,
+				Name:   pulumi.String(appName),
 			},
 			Spec: appsv1.DeploymentSpecArgs{
 				Selector: &metav1.LabelSelectorArgs{
@@ -42,8 +44,32 @@ func main() {
 			return err
 		}
 
+		service, err := corev1.NewService(ctx, appName, &corev1.ServiceArgs{
+			Metadata: &metav1.ObjectMetaArgs{
+				Labels: appLabels,
+				Name:   pulumi.String(appName),
+			},
+			Spec: &corev1.ServiceSpecArgs{
+				Type: pulumi.String("ClusterIP"),
+				Ports: &corev1.ServicePortArray{
+					&corev1.ServicePortArgs{
+						Port:       pulumi.Int(80),
+						TargetPort: pulumi.Int(8080),
+						Protocol:   pulumi.String("TCP"),
+					},
+				},
+				Selector: appLabels,
+			},
+		})
+
+		if err != nil {
+			return err
+		}
+
+		//outputs
 		ctx.Export("name", deployment.Metadata.Elem().Name())
 		ctx.Export("image", deployment.Spec.Template().Spec().Containers().Index(pulumi.IntInput(pulumi.Int(0))).Image())
+		ctx.Export("ip", service.Spec.ClusterIP())
 
 		return nil
 	})
